@@ -7,13 +7,23 @@ from model import CIFAR10Model
 from utils import TrainingLogger
 from torch.optim.lr_scheduler import LambdaLR
 
+
 def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
     def lr_lambda(epoch):
+        # Restart every 20 epochs
+        if epoch % 20 == 0:
+            epoch = epoch % 20
+        
         if epoch < warmup_epochs:
             return (epoch + 1) / warmup_epochs
-        return 0.5 * (1 + math.cos(math.pi * (epoch - warmup_epochs) / (total_epochs - warmup_epochs))) * (1 - 1e-6) + 1e-6
+        
+        # Adjust cycle length for restart
+        cycle_length = 20 - warmup_epochs
+        current_epoch = (epoch % 20) - warmup_epochs
+        return 0.5 * (1 + math.cos(math.pi * current_epoch / cycle_length)) * (1 - 1e-6) + 1e-6
     
     return LambdaLR(optimizer, lr_lambda)
+
 
 def train_model():
     # CIFAR-10 mean and std values
@@ -21,12 +31,13 @@ def train_model():
     std = [0.2470, 0.2435, 0.2616]
     
     print("Preparing datasets...")
-    transform = AlbumentationsTransform(mean=mean, std=std)
+    train_transform = AlbumentationsTransform(mean=mean, std=std, train=True)
+    test_transform = AlbumentationsTransform(mean=mean, std=std, train=False)
     
     trainset = CIFAR10Dataset(
         root='./data', 
         train=True,
-        transform=transform,
+        transform=train_transform,
         download=True
     )
     
@@ -40,7 +51,7 @@ def train_model():
     testset = CIFAR10Dataset(
         root='./data', 
         train=False,
-        transform=transform,
+        transform=test_transform,
         download=True
     )
     
@@ -58,13 +69,11 @@ def train_model():
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=0.0001,
+        lr=0.001,  # Adjusted learning rate for AdamW
         weight_decay=5e-4,
         betas=(0.9, 0.999),
         eps=1e-8
     )
-    
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
     
     num_epochs = 50
     warmup_epochs = 10
@@ -72,6 +81,9 @@ def train_model():
     
     logger = TrainingLogger()
     print("Starting training...")
+    
+    # Track best accuracy
+    best_acc = 0.0
     
     try:
         for epoch in range(1, num_epochs + 1):
@@ -86,6 +98,9 @@ def train_model():
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
+                
+                # Clip gradients after backward pass
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
                 optimizer.step()
                 
                 running_loss += loss.item()
@@ -119,18 +134,39 @@ def train_model():
             avg_loss = running_loss / len(trainloader)
             current_lr = optimizer.param_groups[0]['lr']
             
+            # Save best model
+            if test_acc > best_acc:
+                best_acc = test_acc
+                print(f"\nNew best accuracy: {best_acc:.2f}%")
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'best_acc': best_acc,
+                }, "best_model.pth")
+            
             logger.log_epoch(epoch, train_acc, test_acc, avg_loss, current_lr, len(trainloader))
             scheduler.step()
 
     except KeyboardInterrupt:
-        print("\nTraining interrupted by user")
+        print("\nTraining interrupted by user, saving model checkpoint...")
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'best_acc': best_acc,
+        }, "model_checkpoint.pth")
         logger.done()
     except Exception as e:
         print(f"\nAn error occurred: {str(e)}")
         logger.done()
         raise e
     else:
+        print(f"\nTraining completed. Best accuracy: {best_acc:.2f}%")
         logger.done()
 
+
 if __name__ == "__main__":
-    train_model() 
+    train_model()
