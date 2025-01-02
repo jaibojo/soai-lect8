@@ -11,7 +11,7 @@ def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
     def lr_lambda(epoch):
         if epoch < warmup_epochs:
             return (epoch + 1) / warmup_epochs
-        return 0.5 * (1 + math.cos(math.pi * (epoch - warmup_epochs) / (total_epochs - warmup_epochs)))
+        return 0.5 * (1 + math.cos(math.pi * (epoch - warmup_epochs) / (total_epochs - warmup_epochs))) * (1 - 1e-6) + 1e-6
     
     return LambdaLR(optimizer, lr_lambda)
 
@@ -55,18 +55,19 @@ def train_model():
     print(f"Using device: {device}")
     
     model = CIFAR10Model().to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.3)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=0.0005,
-        weight_decay=1e-3,
-        betas=(0.9, 0.99)
+        lr=0.0001,
+        weight_decay=5e-4,
+        betas=(0.9, 0.999),
+        eps=1e-8
     )
     
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
     
     num_epochs = 50
-    warmup_epochs = 5
+    warmup_epochs = 10
     scheduler = get_lr_scheduler(optimizer, warmup_epochs, num_epochs)
     
     logger = TrainingLogger()
