@@ -74,10 +74,16 @@ class CIFAR10Dataset(datasets.CIFAR10):
     9: Truck
     """
     def __init__(self, root, train=True, transform=None, download=True):
-        super().__init__(root=root, train=train, transform=transform, download=download)
+        super().__init__(root=root, train=train, transform=None, download=download)
+        self.custom_transform = transform
         
     def __getitem__(self, index):
-        img, target = super().__getitem__(index)
-        if self.transform is not None:
-            img = self.transform(img)
+        img, target = self.data[index], self.targets[index]
+        
+        # Convert to PIL Image
+        img = transforms.ToPILImage()(img)
+        
+        if self.custom_transform is not None:
+            img = self.custom_transform(img)
+            
         return img, target 
