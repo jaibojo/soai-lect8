@@ -92,8 +92,10 @@ def train_model():
         eps=1e-8
     )
     
-    num_epochs = 120  # Extended training time
-    warmup_epochs = 3  # Shorter warmup
+    num_epochs = 120  # Total epochs
+    warmup_epochs = max(1, int(0.05 * num_epochs))  # Dynamic warmup (5% of total epochs)
+    print(f"Using {warmup_epochs} warmup epochs")
+    
     scheduler = get_lr_scheduler(optimizer, warmup_epochs, num_epochs)
     
     logger = TrainingLogger()

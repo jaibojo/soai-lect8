@@ -24,7 +24,7 @@ class CIFAR10Model(nn.Module):
             nn.Conv2d(in_channels=3, out_channels=16, kernel_size=(3, 3), padding=1, bias=False),    # in: 32x32x3 -> out: 32x32x16, RF: 3x3
             nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.01)
         )   # params: Conv(3*16*3*3=432) + BN(16*2=32) = 464
 
         # Block 1
@@ -32,11 +32,11 @@ class CIFAR10Model(nn.Module):
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), padding=1, bias=False),    # in: 32x32x16 -> out: 32x32x32, RF: 5x5
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.01),
             nn.Conv2d(in_channels=32, out_channels=32, kernel_size=(3, 3), padding=1, stride=2, bias=False),    # in: 32x32x32 -> out: 16x16x32, RF: 10x10 (5*2 + 0)
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.01)
         )   # params: Conv1(16*32*3*3=4,608) + BN1(32*2=64) + Conv2(32*32*3*3=9,216) + BN2(32*2=64) = 13,952
 
         # Transition Block 1
@@ -49,11 +49,11 @@ class CIFAR10Model(nn.Module):
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), padding=2, dilation=2, bias=False),    # in: 16x16x16 -> out: 16x16x32, RF: 18x18 (10 + 2*(5-1))
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.01),
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(3, 3), padding=1, stride=2, bias=False),    # in: 16x16x32 -> out: 8x8x64, RF: 38x38 (18*2 + 2)
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.01)
         )   # params: Conv1(16*32*3*3=4,608) + BN1(32*2=64) + Conv2(32*64*3*3=18,432) + BN2(64*2=128) = 23,232
 
         # Transition Block 2
@@ -66,11 +66,11 @@ class CIFAR10Model(nn.Module):
             DepthwiseSeparableConv(in_channels=32, out_channels=64, kernel_size=3, padding=1, bias=False),    # in: 8x8x32 -> out: 8x8x64, RF: 40x40
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.01),
             DepthwiseSeparableConv(in_channels=64, out_channels=96, kernel_size=3, padding=1, stride=2, bias=False),    # in: 8x8x64 -> out: 4x4x96, RF: 82x82 (40*2 + 2)
             nn.BatchNorm2d(96),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.01)
         )   # params: DSConv1((32*1*3*3=288)+(32*64*1*1=2,048)) + BN1(64*2=128) + DSConv2((64*1*3*3=576)+(64*96*1*1=6,144)) + BN2(96*2=192) = 9,376
 
         # Transition Block 3
@@ -83,11 +83,11 @@ class CIFAR10Model(nn.Module):
             nn.Conv2d(in_channels=32, out_channels=96, kernel_size=(3, 3), padding=1, bias=False),    # in: 4x4x32 -> out: 4x4x96, RF: 84x84
             nn.BatchNorm2d(96),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.01),
             nn.Conv2d(in_channels=96, out_channels=96, kernel_size=(3, 3), padding=1, stride=2, bias=False),    # in: 4x4x96 -> out: 2x2x96, RF: 170x170 (84*2 + 2)
             nn.BatchNorm2d(96),
             nn.ReLU(),
-            nn.Dropout(0.1)
+            nn.Dropout(0.01)
         )   # params: Conv1(32*96*3*3=27,648) + BN1(96*2=192) + Conv2(96*96*3*3=82,944) + BN2(96*2=192) = 110,976
 
         # Global Average Pooling and FC layer
