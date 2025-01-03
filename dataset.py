@@ -10,17 +10,24 @@ class CIFAR10Transform:
             # Spatial transforms (before tensor conversion)
             transforms_list.extend([
                 transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(15),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomRotation(
+                    degrees=15,
+                    fill=(int(mean[0]*255), int(mean[1]*255), int(mean[2]*255))
+                ),
                 transforms.RandomAffine(
                     degrees=0,
-                    translate=(0.05, 0.05),
-                    scale=(0.95, 1.05)
+                    translate=(0.1, 0.1),  # Increased translation
+                    scale=(0.9, 1.1),      # Increased scale range
+                    fill=(int(mean[0]*255), int(mean[1]*255), int(mean[2]*255))
                 ),
                 transforms.ColorJitter(
-                    brightness=0.1,
-                    contrast=0.1
+                    brightness=0.2,    # Increased color augmentation
+                    contrast=0.2,
+                    saturation=0.2,
+                    hue=0.1
                 ),
+                transforms.RandomGrayscale(p=0.1),  # Added grayscale
             ])
         
         # Convert to tensor and normalize
@@ -31,14 +38,20 @@ class CIFAR10Transform:
         
         if train:
             # Cutout (after tensor conversion)
-            transforms_list.append(
+            transforms_list.extend([
                 transforms.RandomErasing(
-                    p=0.5,
-                    scale=(0.02, 0.1),
+                    p=0.3,             # Reduced probability
+                    scale=(0.02, 0.2),  # Increased max size
                     ratio=(0.3, 3.3),
-                    value=0
+                    value='random'      # Use random values instead of 0
+                ),
+                transforms.RandomErasing(  # Second erasing for more robustness
+                    p=0.2,
+                    scale=(0.02, 0.15),
+                    ratio=(0.3, 3.3),
+                    value='random'
                 )
-            )
+            ])
         
         self.transform = transforms.Compose(transforms_list)
     

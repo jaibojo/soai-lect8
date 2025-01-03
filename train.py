@@ -6,12 +6,13 @@ from torchvision import transforms, datasets
 from model import CIFAR10Model
 from utils import TrainingLogger
 from torch.optim.lr_scheduler import LambdaLR
+from dataset import CIFAR10Transform, CIFAR10Dataset
 
 
 def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
     def lr_lambda(epoch):
-        # Restart every 35 epochs (instead of 30)
-        cycle_length = 35
+        # Longer cycles for more stable learning
+        cycle_length = 40
         if epoch < warmup_epochs:
             # Linear warmup
             return (epoch + 1) / warmup_epochs
@@ -23,16 +24,16 @@ def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
         # Cosine decay with higher minimum LR
         cosine_decay = 0.5 * (1 + math.cos(math.pi * cycle_epoch / cycle_length))
         
-        # Use different LR ranges for different parts of training
-        if cycle_epoch < cycle_length * 0.4:  # First 40% of cycle
-            # Higher LR range for faster learning
-            lr = 0.1 + 0.9 * cosine_decay
-        else:  # Last 60% of cycle
-            # Lower LR range for fine-tuning
-            lr = 0.075 + 0.425 * cosine_decay
+        # Three-phase learning within cycle
+        if cycle_epoch < cycle_length * 0.3:  # First 30% - aggressive learning
+            lr = 0.15 + 0.85 * cosine_decay
+        elif cycle_epoch < cycle_length * 0.7:  # Middle 40% - balanced learning
+            lr = 0.1 + 0.6 * cosine_decay
+        else:  # Last 30% - fine-tuning
+            lr = 0.075 + 0.325 * cosine_decay
         
-        # Reduce max LR by 15% each cycle
-        lr *= 0.85 ** cycle
+        # More gradual LR reduction between cycles
+        lr *= 0.9 ** cycle
         
         return lr
     
@@ -46,37 +47,11 @@ def train_model():
     
     print("Preparing datasets...")
     
-    # Training transforms
-    train_transform = transforms.Compose([
-        transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
-        transforms.RandomAffine(
-            degrees=0,
-            translate=(0.05, 0.05),
-            scale=(0.95, 1.05)
-        ),
-        transforms.ColorJitter(
-            brightness=0.1,
-            contrast=0.1
-        ),
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std),
-        transforms.RandomErasing(
-            p=0.5,
-            scale=(0.02, 0.1),
-            ratio=(0.3, 3.3),
-            value=0
-        )
-    ])
+    # Use custom transforms from dataset.py
+    train_transform = CIFAR10Transform(mean=mean, std=std, train=True)
+    test_transform = CIFAR10Transform(mean=mean, std=std, train=False)
     
-    # Test transforms
-    test_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std)
-    ])
-    
-    trainset = datasets.CIFAR10(
+    trainset = CIFAR10Dataset(
         root='./data', 
         train=True,
         transform=train_transform,
@@ -90,7 +65,7 @@ def train_model():
         num_workers=2
     )
 
-    testset = datasets.CIFAR10(
+    testset = CIFAR10Dataset(
         root='./data', 
         train=False,
         transform=test_transform,
@@ -108,17 +83,17 @@ def train_model():
     print(f"Using device: {device}")
     
     model = CIFAR10Model().to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.15)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=0.002,  # Increased from 0.0015
-        weight_decay=8e-4,  # Slightly reduced from 1e-3
+        lr=0.002,
+        weight_decay=6e-4,
         betas=(0.9, 0.999),
         eps=1e-8
     )
     
-    num_epochs = 100
-    warmup_epochs = 5
+    num_epochs = 120  # Extended training time
+    warmup_epochs = 3  # Shorter warmup
     scheduler = get_lr_scheduler(optimizer, warmup_epochs, num_epochs)
     
     logger = TrainingLogger()
