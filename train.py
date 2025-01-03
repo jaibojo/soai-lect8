@@ -10,17 +10,24 @@ from torch.optim.lr_scheduler import LambdaLR
 
 def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
     def lr_lambda(epoch):
-        # Restart every 20 epochs
-        if epoch % 20 == 0:
-            epoch = epoch % 20
-        
+        # Restart every 25 epochs (instead of 20)
+        cycle_length = 25
         if epoch < warmup_epochs:
+            # Linear warmup
             return (epoch + 1) / warmup_epochs
         
-        # Adjust cycle length for restart
-        cycle_length = 20 - warmup_epochs
-        current_epoch = (epoch % 20) - warmup_epochs
-        return 0.5 * (1 + math.cos(math.pi * current_epoch / cycle_length)) * (1 - 1e-6) + 1e-6
+        # Get current position in cycle
+        cycle = (epoch - warmup_epochs) // cycle_length
+        cycle_epoch = (epoch - warmup_epochs) % cycle_length
+        
+        # Cosine decay with minimum LR of 1% of max
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * cycle_epoch / cycle_length))
+        lr = 0.01 + 0.99 * cosine_decay  # Decay from 1.0 to 0.01
+        
+        # Reduce max LR by 10% each cycle
+        lr *= 0.9 ** cycle
+        
+        return lr
     
     return LambdaLR(optimizer, lr_lambda)
 
@@ -94,17 +101,17 @@ def train_model():
     print(f"Using device: {device}")
     
     model = CIFAR10Model().to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.2)
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=0.001,  # Adjusted learning rate for AdamW
-        weight_decay=5e-4,
+        lr=0.002,
+        weight_decay=1e-3,
         betas=(0.9, 0.999),
         eps=1e-8
     )
     
-    num_epochs = 50
-    warmup_epochs = 10
+    num_epochs = 100
+    warmup_epochs = 5
     scheduler = get_lr_scheduler(optimizer, warmup_epochs, num_epochs)
     
     logger = TrainingLogger()
