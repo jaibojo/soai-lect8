@@ -10,8 +10,8 @@ from torch.optim.lr_scheduler import LambdaLR
 
 def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
     def lr_lambda(epoch):
-        # Restart every 30 epochs (instead of 25)
-        cycle_length = 30
+        # Restart every 35 epochs (instead of 30)
+        cycle_length = 35
         if epoch < warmup_epochs:
             # Linear warmup
             return (epoch + 1) / warmup_epochs
@@ -20,13 +20,19 @@ def get_lr_scheduler(optimizer, warmup_epochs, total_epochs):
         cycle = (epoch - warmup_epochs) // cycle_length
         cycle_epoch = (epoch - warmup_epochs) % cycle_length
         
-        # Cosine decay with minimum LR of 5% of max
+        # Cosine decay with higher minimum LR
         cosine_decay = 0.5 * (1 + math.cos(math.pi * cycle_epoch / cycle_length))
-        lr = 0.05 + 0.95 * cosine_decay  # Decay from 1.0 to 0.05
         
-        # Reduce max LR by 20% each cycle but keep min LR fixed
-        max_lr = 0.8 ** cycle
-        lr = 0.05 + (max_lr - 0.05) * cosine_decay
+        # Use different LR ranges for different parts of training
+        if cycle_epoch < cycle_length * 0.4:  # First 40% of cycle
+            # Higher LR range for faster learning
+            lr = 0.1 + 0.9 * cosine_decay
+        else:  # Last 60% of cycle
+            # Lower LR range for fine-tuning
+            lr = 0.075 + 0.425 * cosine_decay
+        
+        # Reduce max LR by 15% each cycle
+        lr *= 0.85 ** cycle
         
         return lr
     
@@ -102,11 +108,11 @@ def train_model():
     print(f"Using device: {device}")
     
     model = CIFAR10Model().to(device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.15)  # Reduced from 0.2
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.15)
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=0.0015,  # Reduced from 0.002
-        weight_decay=1e-3,
+        lr=0.002,  # Increased from 0.0015
+        weight_decay=8e-4,  # Slightly reduced from 1e-3
         betas=(0.9, 0.999),
         eps=1e-8
     )
