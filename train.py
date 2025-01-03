@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import math
+import time
 from torchvision import transforms, datasets
 from model import CIFAR10Model
 from utils import TrainingLogger
@@ -106,85 +107,71 @@ def train_model():
     
     try:
         for epoch in range(1, num_epochs + 1):
+            epoch_start_time = time.time()  # Start timing the epoch
             model.train()
             running_loss = 0.0
             correct = 0
             total = 0
             
+            # Training loop
             for i, (inputs, labels) in enumerate(trainloader, 1):
                 inputs, labels = inputs.to(device), labels.to(device)
+                
                 optimizer.zero_grad()
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
-                
-                # Clip gradients after backward pass
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
                 optimizer.step()
                 
                 running_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
+                _, predicted = outputs.max(1)
                 total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                correct += predicted.eq(labels).sum().item()
                 
-                if i % 50 == 0:
-                    train_acc = 100 * correct / total
-                    avg_loss = running_loss / i
-                    current_lr = optimizer.param_groups[0]['lr']
-                    logger.log_step(epoch, i, train_acc, avg_loss, current_lr, len(trainloader))
+                if i % 50 == 0 or i == len(trainloader):
+                    train_loss = running_loss / i
+                    train_acc = 100. * correct / total
+                    epoch_time = time.time() - epoch_start_time  # Calculate time taken
+                    logger.log(epoch, i, len(trainloader), train_acc, None, train_loss, scheduler.get_last_lr()[0], epoch_time)
             
-            # Evaluate on test set
+            # Validation
             model.eval()
-            test_correct = 0
-            test_total = 0
             test_loss = 0
+            correct = 0
+            total = 0
+            
             with torch.no_grad():
                 for inputs, labels in testloader:
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
+                    
                     test_loss += loss.item()
-                    _, predicted = torch.max(outputs.data, 1)
-                    test_total += labels.size(0)
-                    test_correct += (predicted == labels).sum().item()
+                    _, predicted = outputs.max(1)
+                    total += labels.size(0)
+                    correct += predicted.eq(labels).sum().item()
             
-            train_acc = 100 * correct / total
-            test_acc = 100 * test_correct / test_total
-            avg_loss = running_loss / len(trainloader)
-            current_lr = optimizer.param_groups[0]['lr']
+            test_loss = test_loss / len(testloader)
+            test_acc = 100. * correct / total
+            epoch_time = time.time() - epoch_start_time  # Calculate total epoch time
+            
+            # Log final stats for the epoch
+            logger.log(epoch, len(trainloader), len(trainloader), train_acc, test_acc, train_loss, scheduler.get_last_lr()[0], epoch_time)
+            
+            scheduler.step()
             
             # Save best model
             if test_acc > best_acc:
                 best_acc = test_acc
-                print(f"\nNew best accuracy: {best_acc:.2f}%")
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'best_acc': best_acc,
-                }, "best_model.pth")
-            
-            logger.log_epoch(epoch, train_acc, test_acc, avg_loss, current_lr, len(trainloader))
-            scheduler.step()
-
+                torch.save(model.state_dict(), 'best_model.pth')
+                
     except KeyboardInterrupt:
-        print("\nTraining interrupted by user, saving model checkpoint...")
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'best_acc': best_acc,
-        }, "model_checkpoint.pth")
-        logger.done()
+        print('\nTraining interrupted by user')
     except Exception as e:
-        print(f"\nAn error occurred: {str(e)}")
-        logger.done()
+        print('\nError during training:', str(e))
         raise e
-    else:
-        print(f"\nTraining completed. Best accuracy: {best_acc:.2f}%")
-        logger.done()
+    
+    print(f"\nBest Test Accuracy: {best_acc:.2f}%")
 
 
 if __name__ == "__main__":
