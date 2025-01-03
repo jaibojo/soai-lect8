@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import math
-from dataset import CIFAR10Dataset, AlbumentationsTransform
+from torchvision import transforms, datasets
 from model import CIFAR10Model
 from utils import TrainingLogger
 from torch.optim.lr_scheduler import LambdaLR
@@ -31,10 +31,38 @@ def train_model():
     std = [0.2470, 0.2435, 0.2616]
     
     print("Preparing datasets...")
-    train_transform = AlbumentationsTransform(mean=mean, std=std, train=True)
-    test_transform = AlbumentationsTransform(mean=mean, std=std, train=False)
     
-    trainset = CIFAR10Dataset(
+    # Training transforms
+    train_transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.RandomAffine(
+            degrees=0,
+            translate=(0.05, 0.05),
+            scale=(0.95, 1.05)
+        ),
+        transforms.ColorJitter(
+            brightness=0.1,
+            contrast=0.1
+        ),
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std),
+        transforms.RandomErasing(
+            p=0.5,
+            scale=(0.02, 0.1),
+            ratio=(0.3, 3.3),
+            value=0
+        )
+    ])
+    
+    # Test transforms
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
+    ])
+    
+    trainset = datasets.CIFAR10(
         root='./data', 
         train=True,
         transform=train_transform,
@@ -48,7 +76,7 @@ def train_model():
         num_workers=2
     )
 
-    testset = CIFAR10Dataset(
+    testset = datasets.CIFAR10(
         root='./data', 
         train=False,
         transform=test_transform,

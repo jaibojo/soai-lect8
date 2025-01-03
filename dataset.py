@@ -1,84 +1,49 @@
 import torch
-from torchvision import datasets
+from torchvision import datasets, transforms
 import numpy as np
-from albumentations import (
-    Compose, CoarseDropout, Normalize, HorizontalFlip, 
-    RandomBrightnessContrast, ShiftScaleRotate, GaussNoise,
-    PadIfNeeded, RandomCrop, Blur
-)
 
-class AlbumentationsTransform:
+class CIFAR10Transform:
     def __init__(self, mean, std, train=True):
+        transforms_list = []
+        
         if train:
-            self.transform = Compose([
-                # Spatial transforms
-                PadIfNeeded(min_height=36, min_width=36, border_mode=4, p=1.0),
-                RandomCrop(height=32, width=32, p=1.0),
-                HorizontalFlip(p=0.5),
-                ShiftScaleRotate(
-                    shift_limit=0.05,
-                    scale_limit=0.05,
-                    rotate_limit=15,
-                    border_mode=4,  # BORDER_REFLECT_101
-                    p=0.7
+            # Spatial transforms (before tensor conversion)
+            transforms_list.extend([
+                transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(15),
+                transforms.RandomAffine(
+                    degrees=0,
+                    translate=(0.05, 0.05),
+                    scale=(0.95, 1.05)
                 ),
-                
-                # Color transforms
-                RandomBrightnessContrast(
-                    brightness_limit=0.1,
-                    contrast_limit=0.1,
-                    p=0.5
+                transforms.ColorJitter(
+                    brightness=0.1,
+                    contrast=0.1
                 ),
-                
-                # Noise and dropout
-                GaussNoise(
-                    var_limit=(5.0, 20.0),
-                    mean=0,
-                    per_channel=True,
-                    p=0.3
-                ),
-                Blur(
-                    blur_limit=3,
-                    p=0.2
-                ),
-                CoarseDropout(
-                    max_holes=2,
-                    max_height=6,
-                    max_width=6,
-                    min_holes=1,
-                    min_height=2,
-                    min_width=2,
-                    fill_value=None,  # Using None will use random values
-                    p=0.5
-                ),
-                
-                # Normalization
-                Normalize(
-                    mean=mean,
-                    std=std,
-                    max_pixel_value=255.0,
-                )
             ])
-        else:
-            # Test transform - only normalization
-            self.transform = Compose([
-                Normalize(
-                    mean=mean,
-                    std=std,
-                    max_pixel_value=255.0,
+        
+        # Convert to tensor and normalize
+        transforms_list.extend([
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std)
+        ])
+        
+        if train:
+            # Cutout (after tensor conversion)
+            transforms_list.append(
+                transforms.RandomErasing(
+                    p=0.5,
+                    scale=(0.02, 0.1),
+                    ratio=(0.3, 3.3),
+                    value=0
                 )
-            ])
-
+            )
+        
+        self.transform = transforms.Compose(transforms_list)
+    
     def __call__(self, img):
-        img = np.array(img)
-        transformed = self.transform(image=img)
-        img_transformed = transformed['image']
-        tensor = torch.from_numpy(img_transformed)
-        tensor = tensor.float()
-        if tensor.ndim == 3 and tensor.shape[-1] == 3:
-            tensor = tensor.permute(2, 0, 1)  # HWC -> CHW
-        return tensor
-
+        return self.transform(img)
 
 class CIFAR10Dataset(datasets.CIFAR10):
     """
